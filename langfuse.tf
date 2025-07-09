@@ -44,7 +44,7 @@ s3:
     secretKeyRef:
       name: ${kubernetes_secret.langfuse.metadata[0].name}
       key: storage-access-key
-  forcePathStyle: false
+  forcePathStyle: true
   eventUpload:
     prefix: "events/"
   batchExport:
@@ -115,5 +115,10 @@ resource "helm_release" "langfuse" {
     local.langfuse_values,
     local.ingress_values,
     local.encryption_values
+  ]
+
+  depends_on = [
+    azurerm_key_vault_certificate.this,
+    azurerm_key_vault_access_policy.this,
   ]
 }

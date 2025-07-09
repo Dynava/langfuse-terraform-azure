@@ -152,3 +152,4 @@ variable "langfuse_helm_chart_version" {
   type        = string
   default     = "1.3.1"
 }
+

@@ -8,13 +8,14 @@ resource "random_string" "key_vault_postfix" {
 }
 
 resource "azurerm_key_vault" "this" {
-  name                       = module.naming.key_vault.name_unique
-  location                   = azurerm_resource_group.this.location
-  resource_group_name        = azurerm_resource_group.this.name
-  tenant_id                  = data.azurerm_client_config.current.tenant_id
-  sku_name                   = "standard"
-  purge_protection_enabled   = true
-  soft_delete_retention_days = 7
+  # name                       = module.naming.key_vault.name_unique
+  name                        = "${local.globally_unique_prefix}${var.name}${random_string.key_vault_postfix.result}"
+  location                    = azurerm_resource_group.this.location
+  resource_group_name         = azurerm_resource_group.this.name
+  tenant_id                   = data.azurerm_client_config.current.tenant_id
+  sku_name                    = "standard"
+  purge_protection_enabled    = true
+  soft_delete_retention_days  = 7
 }
 
 resource "azurerm_key_vault_access_policy" "this" {
@@ -35,6 +36,7 @@ resource "azurerm_key_vault_access_policy" "this" {
     "ManageIssuers",
     "SetIssuers",
     "Update",
+    "Recover"
   ]
 
   key_permissions = [
@@ -58,7 +60,8 @@ resource "azurerm_key_vault_access_policy" "this" {
 
 # Add Private Endpoint for Key Vault
 resource "azurerm_private_endpoint" "key_vault" {
-  name                = "${module.naming.private_endpoint.name}-keyvault"
+  # name                = "${module.naming.private_endpoint.name}-keyvault"
+  name                = "${var.name}-keyvault"
   location            = azurerm_resource_group.this.location
   resource_group_name = azurerm_resource_group.this.name
   subnet_id           = azurerm_subnet.aks.id
@@ -94,54 +97,60 @@ resource "azurerm_private_dns_a_record" "key_vault" {
 }
 
 resource "azurerm_key_vault_certificate" "this" {
-  name         = module.naming.key_vault_certificate.name
+  # name         = module.naming.key_vault_certificate.name
+  name         = var.name
   key_vault_id = azurerm_key_vault.this.id
 
-  certificate_policy {
-    issuer_parameters {
-      name = "Self"
-    }
-
-    key_properties {
-      exportable = true
-      key_size   = 2048
-      key_type   = "RSA"
-      reuse_key  = true
-    }
-
-    lifetime_action {
-      action {
-        action_type = "AutoRenew"
-      }
-
-      trigger {
-        days_before_expiry = 30
-      }
-    }
-
-    secret_properties {
-      content_type = "application/x-pkcs12"
-    }
-
-    x509_certificate_properties {
-      extended_key_usage = ["1.3.6.1.5.5.7.3.1"]
-
-      key_usage = [
-        "digitalSignature",
-        "keyEncipherment"
-      ]
-
-      subject            = "CN=${var.domain}"
-      validity_in_months = 12
-
-      subject_alternative_names {
-        dns_names = [var.domain]
-      }
-    }
+  certificate {
+    contents = filebase64("langfuse.duckdns.org.pfx")
+    password = "Abcmhbt123" # only if needed
   }
 
+#   certificate_policy {
+#     issuer_parameters {
+#       name = "Self"
+#     }
+#
+#     key_properties {
+#       exportable = true
+#       key_size   = 2048
+#       key_type   = "RSA"
+#       reuse_key  = true
+#     }
+#
+#     lifetime_action {
+#       action {
+#         action_type = "AutoRenew"
+#       }
+#
+#       trigger {
+#         days_before_expiry = 30
+#       }
+#     }
+#
+#     secret_properties {
+#       content_type = "application/x-pkcs12"
+#     }
+#
+#     x509_certificate_properties {
+#       extended_key_usage = ["1.3.6.1.5.5.7.3.1"]
+#
+#       key_usage = [
+#         "digitalSignature",
+#         "keyEncipherment"
+#       ]
+#
+#       subject            = "CN=${var.domain}"
+#       validity_in_months = 12
+#
+#       subject_alternative_names {
+#         dns_names = [var.domain]
+#       }
+#     }
+#   }
+
   depends_on = [
-    azurerm_key_vault_access_policy.this, 
+    azurerm_key_vault_access_policy.this,
     azurerm_key_vault_access_policy.appgw,
     azurerm_dns_zone.this
     ]

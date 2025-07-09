@@ -6,17 +6,24 @@ langfuse:
     className: azure-application-gateway
     annotations:
       appgw.ingress.kubernetes.io/ssl-redirect: "true"
-      appgw.ingress.kubernetes.io/appgw-ssl-certificate: ${var.name}
+      appgw.ingress.kubernetes.io/appgw-ssl-certificate: ${azurerm_key_vault_certificate.this.name}
+      appgw.ingress.kubernetes.io/appgw-ssl-certificate-keyvault-secret-id: ${azurerm_key_vault_certificate.this.secret_id}
     hosts:
     - host: ${var.domain}
       paths:
       - path: /
         pathType: Prefix
+    tls:
+      enabled: true
+      secretName: ${var.name}-tls-secret
+      hosts:
+      - ${var.domain}
 EOT
 }
 
 resource "azurerm_subnet" "appgw" {
-  name                 = "${module.naming.subnet.name}-appgw"
+  # name                 = "${module.naming.subnet.name}-appgw"
+  name                 = "appgw"
   resource_group_name  = azurerm_resource_group.this.name
   virtual_network_name = azurerm_virtual_network.this.name
   address_prefixes     = [var.app_gateway_subnet_address_prefix]
@@ -24,7 +31,8 @@ resource "azurerm_subnet" "appgw" {
 
 
 resource "azurerm_network_security_group" "appgw" {
-  name                = "${module.naming.network_security_group.name}-appgw"
+  # name                = "${module.naming.network_security_group.name}-appgw"
+  name                = "${var.name}-appgw"
   location            = azurerm_resource_group.this.location
   resource_group_name = azurerm_resource_group.this.name
 }
@@ -96,7 +104,8 @@ resource "azurerm_subnet_network_security_group_association" "appgw" {
 
 # Create User Assigned Identity for Application Gateway
 resource "azurerm_user_assigned_identity" "appgw" {
-  name                = "${module.naming.user_assigned_identity.name}-appgw-identity"
+  # name                = "${module.naming.user_assigned_identity.name}-appgw-identity"
+  name                = "${var.name}-appgw-identity"
   resource_group_name = azurerm_resource_group.this.name
   location            = azurerm_resource_group.this.location
 }
@@ -115,7 +124,8 @@ resource "azurerm_key_vault_access_policy" "appgw" {
 
 # Enable Azure Application Gateway Ingress Controller
 resource "azurerm_application_gateway" "this" {
-  name                = module.naming.application_gateway.name
+  # name                = module.naming.application_gateway.name
+  name                = var.name
   resource_group_name = azurerm_resource_group.this.name
   location            = azurerm_resource_group.this.location
 
@@ -153,8 +163,8 @@ resource "azurerm_application_gateway" "this" {
   }
 
   ssl_certificate {
-    name                = var.name
-    key_vault_secret_id = azurerm_key_vault_certificate.this.versionless_secret_id
+    name                = azurerm_key_vault_certificate.this.name
+    key_vault_secret_id = azurerm_key_vault_certificate.this.secret_id
   }
 
   backend_address_pool {
@@ -174,6 +184,7 @@ resource "azurerm_application_gateway" "this" {
     frontend_ip_configuration_name = "frontend-ip-configuration"
     frontend_port_name             = "http"
     protocol                       = "Http"
+    host_name                      = var.domain
   }
 
   http_listener {
@@ -182,6 +193,7 @@ resource "azurerm_application_gateway" "this" {
     frontend_port_name             = "https"
     protocol                       = "Https"
     ssl_certificate_name           = var.name
+    host_name                      = var.domain
   }
 
   request_routing_rule {
@@ -219,7 +231,8 @@ resource "azurerm_application_gateway" "this" {
 }
 
 resource "azurerm_public_ip" "appgw" {
-  name                = "${module.naming.public_ip.name}-appgw"
+  # name                = "${module.naming.public_ip.name}-appgw"
+  name                = "${var.name}-appgw"
   resource_group_name = azurerm_resource_group.this.name
   location            = azurerm_resource_group.this.location
   allocation_method   = "Static"
