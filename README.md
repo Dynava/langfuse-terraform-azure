@@ -13,15 +13,15 @@ This module aims to provide a production-ready, secure, and scalable deployment 
 
 ```hcl
 module "langfuse" {
-  source = "github.com/langfuse/langfuse-terraform-azure?ref=0.2.0"
+  source = "github.com/Dynava/langfuse-terraform-azure?ref=1.0.0"
 
-  domain              = "langfuse.example.com"
-  location            = "westeurope"  # Optional: defaults to westeurope
-  
+  domain              = "langfuse.duckdns.org"
+  location            = "swedencentral"  # Optional: defaults to swedencentral
+
   # Optional use a different name for your installation
   # e.g. when using the module multiple times on the same Azure subscription
-  name = "langfuse"
-  
+  name = "langfuse2"
+
   # Optional: Configure the Virtual Network
   virtual_network_address_prefix = "10.224.0.0/12"
   aks_subnet_address_prefix     = "10.224.0.0/16"
@@ -43,7 +43,7 @@ module "langfuse" {
   postgres_ha_mode       = "SameZone"
   postgres_sku_name      = "GP_Standard_D2s_v3"
   postgres_storage_mb    = 32768
-  
+
   # Optional: Configure the cache
   redis_sku_name = "Basic"
   redis_family   = "C"
@@ -57,7 +57,12 @@ module "langfuse" {
   use_ddos_protection = true
 
   # Optional: Configure Langfuse Helm chart version
-  langfuse_helm_chart_version = "1.3.1"
+  langfuse_helm_chart_version = "1.2.15"
+}
+
+provider "azurerm" {
+  features {}
+  subscription_id = "<yourAzureSubscriptionID>"
 }
 
 provider "kubernetes" {
@@ -220,6 +225,78 @@ The module creates a complete Langfuse stack with the following Azure components
 | storage_account_name       | The name of the storage account                     |
 | storage_account_key        | The primary access key for the storage account      |
 | dns_name_servers           | The name servers for the DNS zone                   |
+
+## Debug
+
+### General
+Azure Portal > Resource groups > 'Langfuse rg' > Overview > Resources
+- 'Langfuse Application gateway' > Settings > Listeners
+  - > Listing on port 80 and 443 ? (or 'kubectl get ingress -A')
+  - > whether 'host name' is correct ?
+  - > port 443 has correct Certificate ?
+
+### 502 Bad Gateway
+- `kubectl get svc -A`
+  - > Find svc with name '...-web'
+  - > `kubectl get svc -n langfuse ...-web -o yaml`
+  - > Check if 
+      ```hcl
+      ports:
+      - port: 80           # <- what App Gateway connects to
+        targetPort: 3000   # <- actual port in the container
+        protocol: TCP
+        name: http
+      ```
+  - > Patch service
+      ```hcl
+      kubectl patch svc ...-web -n langfuse --type='merge' -p '
+      spec:
+        ports:
+          - port: 80
+            targetPort: 3000
+            protocol: TCP
+            name: http
+      '
+      ```
+
+### Self-signed certification not secure enough
+- Install acme.sh
+```angular2html
+git clone https://github.com/acmesh-official/acme.sh.git
+cd acme.sh
+./acme.sh --install --home ~/.acme.sh --accountemail your-email@example.com
+source ~/.bashrc # Or restart the terminal
+```
+- Generate Certificate with acme.sh (DNS-01 Challenge for DuckDNS):
+```angular2html
+# Set your DuckDNS API token as an environment variable for acme.sh
+export DuckDNS_Token="YOUR_DUCKDNS_API_TOKEN" # Replace with your actual token from duckdns.org
+
+# Issue the certificate
+acme.sh --issue -d langfuse.duckdns.org --dns dns_duckdns --debug
+```
+- Locate your certificate files
+```angular2html
+acme.sh stores certificates in ~/.acme.sh/langfuse.duckdns.org/ inside your WSL2 distribution.
+fullchain.cer
+langfuse.duckdns.org.key
+```
+- Convert to PFX using openssl within WSL2
+```angular2html
+# You might need to install openssl first if it's not present
+
+# Navigate to where your certs are located
+cd ~/.acme.sh/langfuse.duckdns.org.../
+
+# Convert to PFX. We'll put it in a mounted Windows path for easy access.
+# Note: WSL paths like /mnt/c/Users/YourUser/Documents map to C:\Users\YourUser\Documents
+openssl pkcs12 -export -out langfuse.duckdns.org.pfx \
+               -inkey langfuse.duckdns.org.key \
+               -in fullchain.cer \
+               -name "langfuse2" # This name MUST match what you put in your Ingress and Key Vault
+```
+You will be prompted for an export password for the PFX. REMEMBER THIS PASSWORD!
+- Copy `langfuse.duckdns.org.pfx` to the same folder with `main.tf`
 
 ## Support
 
