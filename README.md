@@ -54,7 +54,7 @@ module "langfuse" {
 
   # Optional: Security features
   use_encryption_key = true
-  use_ddos_protection = true
+  use_ddos_protection = false # cost of ddos protection is high. Consider the prices before setting to true
 
   # Optional: Configure Langfuse Helm chart version
   langfuse_helm_chart_version = "1.2.15"
@@ -234,6 +234,11 @@ Azure Portal > Resource groups > 'Langfuse rg' > Overview > Resources
   - > Listing on port 80 and 443 ? (or 'kubectl get ingress -A')
   - > whether 'host name' is correct ?
   - > port 443 has correct Certificate ?
+
+Confirm Ingress is Configured Correctly
+```hcl
+  kubectl describe ingress <ingress-name> -n <namespace>
+```
 
 ### 502 Bad Gateway
 - `kubectl get svc -A`
